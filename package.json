@@ -8,7 +8,7 @@
   "dependencies": {
   "axios": "^1.x.x",
   "cors": "^2.x.x",
-  "express": "^4.x.x"
+  "express": "^4.x.x",
   "gtfs-realtime-bindings": "^1.x.x"
   } 
 }
