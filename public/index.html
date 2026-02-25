@@ -1,47 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>KTMB Command Center</title>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8">
+<title>KTMB Command Center</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet/dist/leaflet.css"
-  />
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
-  <style>
-    body {
-      margin: 0;
-      background: #0b0f1a;
-      color: #00ffcc;
-      font-family: monospace;
-    }
+<style>
+body{
+    margin:0;
+    background:#0b0f1a;
+    color:#00ffc3;
+    font-family:Segoe UI;
+}
 
-    #header {
-      padding: 15px;
-      text-align: center;
-      font-size: 20px;
-      background: #111827;
-      border-bottom: 2px solid #00ffcc;
-    }
+#map{
+    height:100vh;
+}
 
-    #map {
-      height: 90vh;
-    }
+.panel{
+    position:absolute;
+    top:20px;
+    left:20px;
+    background:rgba(0,0,0,0.8);
+    padding:15px;
+    border-radius:10px;
+    box-shadow:0 0 20px #00ffc3;
+}
 
-    .train-label {
-      color: #00ffcc;
-      font-size: 12px;
-      font-weight: bold;
-    }
-  </style>
+.title{
+    font-size:20px;
+    font-weight:bold;
+}
+
+.stat{
+    margin-top:5px;
+    font-size:14px;
+}
+</style>
 </head>
 
 <body>
 
-<div id="header">
-  🚆 KTMB COMMAND CENTER – LIVE VEHICLE TRACKING
+<div class="panel">
+<div class="title">🛰 KTMB Command Center</div>
+<div class="stat">🚆 Active trains: <span id="count">0</span></div>
+<div class="stat">🕒 Last update: <span id="time">--</span></div>
 </div>
 
 <div id="map"></div>
@@ -49,53 +53,62 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
-  const map = L.map('map').setView([4.5, 102], 7);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors'
-  }).addTo(map);
+const map = L.map('map').setView([4.5,102],7);
 
-  let markers = [];
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+).addTo(map);
 
-  async function loadTrains() {
-    try {
-      const response = await fetch('/api/ktmb');
-      const data = await response.json();
+const trainIcon = L.icon({
+    iconUrl: 'https://cdn-icons-png.flaticon.com/512/685/685352.png',
+    iconSize:[32,32]
+});
 
-      // clear old markers
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
+let markers = {};
 
-      data.entity.forEach(entity => {
-        const v = entity.vehicle;
-        if (!v || !v.position) return;
+async function loadTrains(){
 
-        const lat = v.position.latitude;
-        const lng = v.position.longitude;
-        const speed = v.position.speed;
-        const label = v.vehicle.label;
+    const res = await fetch('/api/ktmb');
+    const data = await res.json();
 
-        const marker = L.circleMarker([lat, lng], {
-          radius: 6,
-          color: speed > 0 ? '#00ffcc' : '#ff4444',
-          fillOpacity: 0.8
-        }).addTo(map);
+    document.getElementById("count").innerText =
+        data.entity.length;
 
-        marker.bindPopup(`
-          <b>${label}</b><br>
-          Speed: ${speed} km/h
-        `);
+    document.getElementById("time").innerText =
+        new Date().toLocaleTimeString();
 
-        markers.push(marker);
-      });
+    data.entity.forEach(train=>{
 
-    } catch (err) {
-      console.error("Error loading trains:", err);
-    }
-  }
+        if(!train.vehicle) return;
 
-  loadTrains();
-  setInterval(loadTrains, 10000);
+        const lat = train.vehicle.position.latitude;
+        const lon = train.vehicle.position.longitude;
+        const id = train.vehicle.vehicle.label;
+
+        if(markers[id]){
+
+            markers[id].setLatLng([lat,lon]);
+
+        }else{
+
+            markers[id] = L.marker([lat,lon],{
+                icon:trainIcon
+            }).addTo(map)
+            .bindTooltip(
+                "🚆 "+id,
+                {permanent:true}
+            );
+
+        }
+
+    });
+
+}
+
+loadTrains();
+setInterval(loadTrains,5000);
+
 </script>
 
 </body>
