@@ -1,1 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>KTMB Command Center</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+
+  <style>
+    body {
+      margin: 0;
+      background: #0b0f1a;
+      color: #00ffcc;
+      font-family: monospace;
+    }
+
+    #header {
+      padding: 15px;
+      text-align: center;
+      font-size: 20px;
+      background: #111827;
+      border-bottom: 2px solid #00ffcc;
+    }
+
+    #map {
+      height: 90vh;
+    }
+
+    .train-label {
+      color: #00ffcc;
+      font-size: 12px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+<div id="header">
+  🚆 KTMB COMMAND CENTER – LIVE VEHICLE TRACKING
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+  const map = L.map('map').setView([4.5, 102], 7);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  let markers = [];
+
+  async function loadTrains() {
+    try {
+      const response = await fetch('/api/ktmb');
+      const data = await response.json();
+
+      // clear old markers
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+
+      data.entity.forEach(entity => {
+        const v = entity.vehicle;
+        if (!v || !v.position) return;
+
+        const lat = v.position.latitude;
+        const lng = v.position.longitude;
+        const speed = v.position.speed;
+        const label = v.vehicle.label;
+
+        const marker = L.circleMarker([lat, lng], {
+          radius: 6,
+          color: speed > 0 ? '#00ffcc' : '#ff4444',
+          fillOpacity: 0.8
+        }).addTo(map);
+
+        marker.bindPopup(`
+          <b>${label}</b><br>
+          Speed: ${speed} km/h
+        `);
+
+        markers.push(marker);
+      });
+
+    } catch (err) {
+      console.error("Error loading trains:", err);
+    }
+  }
+
+  loadTrains();
+  setInterval(loadTrains, 10000);
+</script>
+
+</body>
+</html>
