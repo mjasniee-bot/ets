@@ -1,8 +1,9 @@
 <!DOCTYPE html>
+
 <html>
 <head>
 <meta charset="utf-8"/>
-<title>KTMB Command Center</title>
+<title>KTMB Command Center Level 4 Professional</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -10,9 +11,9 @@
 
 body{
 margin:0;
-background:#0a0f1c;
-font-family:Segoe UI;
-color:#00ffc3;
+background:#020617;
+color:white;
+font-family:Segoe UI,Arial;
 }
 
 #map{
@@ -20,61 +21,68 @@ height:100vh;
 }
 
 .panel{
-
 position:absolute;
-left:0;
-top:0;
-width:320px;
-height:100%;
-background:rgba(0,0,0,0.85);
-padding:15px;
-overflow:auto;
-box-shadow:0 0 25px #00ffc3;
+top:15px;
+left:15px;
+background:rgba(15,23,42,0.95);
+padding:18px;
+border-radius:12px;
+box-shadow:0 0 25px rgba(0,255,255,0.4);
 z-index:999;
-
+width:260px;
 }
 
 .title{
-
-font-size:20px;
-font-weight:bold;
-margin-bottom:15px;
-
+font-size:18px;
+color:#00ffff;
+margin-bottom:8px;
 }
 
 .stat{
-
-margin:5px 0;
-
+font-size:14px;
+margin-top:4px;
 }
 
-.trainItem{
-
-padding:6px;
-margin:4px 0;
-background:#111;
-cursor:pointer;
-border-radius:4px;
-
+.big{
+font-size:28px;
+color:#00ffff;
 }
 
-.trainItem:hover{
-
-background:#00ffc3;
-color:black;
-
+.active{
+color:#00ff88;
 }
 
-.statusMoving{
-
-color:#00ff00;
-
+.stopped{
+color:#ff4d4d;
 }
 
-.statusStopped{
+.lastupdate{
+font-size:12px;
+color:#94a3b8;
+margin-top:6px;
+}
 
-color:#ff4444;
+.train-label{
+font-size:12px;
+font-weight:bold;
+color:white;
+text-shadow:0 0 6px black;
+}
 
+.dot{
+width:12px;
+height:12px;
+border-radius:50%;
+}
+
+.dot-active{
+background:#00ff88;
+box-shadow:0 0 10px #00ff88;
+}
+
+.dot-stopped{
+background:#ff4d4d;
+box-shadow:0 0 10px #ff4d4d;
 }
 
 </style>
@@ -83,137 +91,156 @@ color:#ff4444;
 
 <body>
 
+<div id="map"></div>
+
 <div class="panel">
 
 <div class="title">KTMB Command Center</div>
 
-<div class="stat">
-Active trains: <span id="count">0</span>
+<div class="big" id="total">0</div>
+
+<div class="stat active">
+Active: <span id="activeCount">0</span>
 </div>
 
-<div class="stat">
-Last update: <span id="update">--</span>
+<div class="stat stopped">
+Stopped / Offline: <span id="stoppedCount">0</span>
 </div>
 
-<hr>
-
-<div id="trainList"></div>
-
+<div class="stat" id="systemStatus">
+System: Connecting...
 </div>
 
-<div id="map"></div>
+<div class="lastupdate" id="lastUpdate">
+Last update: -
+</div>
+
+</div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-const map=L.map('map').setView([4.5,102],7);
+const map = L.map('map').setView([4.5,102],7);
 
 L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{maxZoom:19}
 ).addTo(map);
 
+let markers = {};
 
-// reliable train icon
-const trainIcon=L.icon({
+function createDot(active){
 
-iconUrl:"https://cdn-icons-png.flaticon.com/512/481/481103.png",
-iconSize:[32,32]
+const className = active ? "dot dot-active" : "dot dot-stopped";
+
+return L.divIcon({
+
+html:`<div class="${className}"></div>`,
+iconSize:[12,12]
 
 });
 
+}
 
-let markers={};
+function isActive(speed,timestamp){
 
+const now = Date.now()/1000;
+const age = now - timestamp;
+
+return speed > 1 && age < 120;
+
+}
 
 async function loadTrains(){
 
-const res=await fetch("/api/ktmb");
+document.getElementById("systemStatus").innerText="System: Updating...";
 
-const data=await res.json();
+try{
 
-document.getElementById("count").innerText=data.entity.length;
+const res = await fetch("/api/ktmb");
+const data = await res.json();
 
-document.getElementById("update").innerText=
-new Date().toLocaleTimeString();
-
-
-const list=document.getElementById("trainList");
-
-list.innerHTML="";
-
+let activeCount=0;
+let stoppedCount=0;
 
 data.entity.forEach(train=>{
 
-if(!train.vehicle) return;
+const id = train.id;
 
-const lat=train.vehicle.position.latitude;
+const lat = train.vehicle.position.latitude;
+const lon = train.vehicle.position.longitude;
+const speed = train.vehicle.position.speed || 0;
+const timestamp = parseInt(train.vehicle.timestamp);
 
-const lon=train.vehicle.position.longitude;
+const label = train.vehicle.vehicle.label;
 
-const id=train.vehicle.vehicle.label;
+const active = isActive(speed,timestamp);
 
-const speed=train.vehicle.position.speed;
+if(active) activeCount++;
+else stoppedCount++;
 
-const status=speed>1?"MOVING":"STOPPED";
+if(!markers[id]){
 
+const marker = L.marker(
+[lat,lon],
+{icon:createDot(active)}
+).addTo(map);
 
-if(markers[id]){
+marker.bindTooltip(label,{
+permanent:true,
+direction:"top",
+className:"train-label"
+});
 
-markers[id].setLatLng([lat,lon]);
+marker.on("click",()=>{
 
-}else{
-
-markers[id]=L.marker([lat,lon],{
-
-icon:trainIcon
-
-}).addTo(map)
-
-.bindPopup(
-
-"<b>"+id+"</b><br>"+
+marker.bindPopup(
+"<b>"+label+"</b><br>"+
 "Speed: "+speed+" km/h<br>"+
-"Status: "+status
-
-);
-
-}
-
-
-// add to list panel
-
-const div=document.createElement("div");
-
-div.className="trainItem";
-
-div.innerHTML=
-"🚆 "+id+
-"<br><small class="+
-(speed>1?"statusMoving":"statusStopped")+
-">"+status+"</small>";
-
-div.onclick=()=>{
-
-map.setView([lat,lon],12);
-
-markers[id].openPopup();
-
-};
-
-list.appendChild(div);
+"Lat: "+lat.toFixed(5)+"<br>"+
+"Lon: "+lon.toFixed(5)+"<br>"+
+"Status: "+(active?"ACTIVE":"STOPPED")
+).openPopup();
 
 });
 
+markers[id]=marker;
+
+}else{
+
+markers[id].setLatLng([lat,lon]);
+markers[id].setIcon(createDot(active));
+
 }
 
+});
 
-// first load
+document.getElementById("total").innerText =
+activeCount+stoppedCount;
+
+document.getElementById("activeCount").innerText =
+activeCount;
+
+document.getElementById("stoppedCount").innerText =
+stoppedCount;
+
+document.getElementById("systemStatus").innerText =
+"System: LIVE";
+
+document.getElementById("lastUpdate").innerText =
+"Last update: "+new Date().toLocaleTimeString();
+
+}catch(e){
+
+document.getElementById("systemStatus").innerText =
+"System: ERROR";
+
+}
+
+}
 
 loadTrains();
-
-
-// auto refresh
 
 setInterval(loadTrains,5000);
 
