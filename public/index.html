@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -11,9 +10,9 @@
 
 body{
 margin:0;
-background:#0b1220;
-color:white;
-font-family:Segoe UI, Arial;
+background:#0a0f1c;
+font-family:Segoe UI;
+color:#00ffc3;
 }
 
 #map{
@@ -23,91 +22,58 @@ height:100vh;
 .panel{
 
 position:absolute;
-top:15px;
-left:15px;
-background:#0f172a;
+left:0;
+top:0;
+width:320px;
+height:100%;
+background:rgba(0,0,0,0.85);
 padding:15px;
-border-radius:10px;
-box-shadow:0 0 20px rgba(0,255,255,0.4);
+overflow:auto;
+box-shadow:0 0 25px #00ffc3;
 z-index:999;
-min-width:240px;
 
 }
 
 .title{
 
-font-size:18px;
-margin-bottom:10px;
-color:#00ffff;
+font-size:20px;
+font-weight:bold;
+margin-bottom:15px;
 
 }
 
-.counter{
+.stat{
 
-font-size:32px;
-color:#00ffff;
-
-}
-
-.status{
-
-margin-top:5px;
-font-size:14px;
+margin:5px 0;
 
 }
 
-.lastupdate{
+.trainItem{
 
-font-size:12px;
-color:#94a3b8;
-
-}
-
-.filter{
-
-margin-top:10px;
-
-}
-
-button{
-
-background:#1e293b;
-color:white;
-border:none;
-padding:6px 12px;
-margin-right:5px;
+padding:6px;
+margin:4px 0;
+background:#111;
 cursor:pointer;
-border-radius:6px;
+border-radius:4px;
 
 }
 
-button.active{
+.trainItem:hover{
 
-background:#00ffff;
+background:#00ffc3;
 color:black;
 
 }
 
-.train-label{
+.statusMoving{
 
-font-size:11px;
-color:white;
-font-weight:bold;
-text-shadow:0 0 5px black;
+color:#00ff00;
 
 }
 
-.blink{
+.statusStopped{
 
-animation:blink 1s infinite;
-
-}
-
-@keyframes blink{
-
-0%{opacity:1;}
-50%{opacity:0.3;}
-100%{opacity:1;}
+color:#ff4444;
 
 }
 
@@ -117,150 +83,139 @@ animation:blink 1s infinite;
 
 <body>
 
-<div id="map"></div>
-
 <div class="panel">
 
 <div class="title">KTMB Command Center</div>
 
-<div class="counter" id="count">0</div>
+<div class="stat">
+Active trains: <span id="count">0</span>
+</div>
 
-<div class="status" id="status">Connecting...</div>
+<div class="stat">
+Last update: <span id="update">--</span>
+</div>
 
-<div class="lastupdate" id="lastupdate"></div>
+<hr>
 
-<div class="filter">
-
-<button onclick="setFilter('ALL')" id="btnALL" class="active">ALL</button> <button onclick="setFilter('ETS')" id="btnETS">ETS</button> <button onclick="setFilter('KOMUTER')" id="btnKOMUTER">Komuter</button>
+<div id="trainList"></div>
 
 </div>
 
-</div>
+<div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
 <script>
 
-const map = L.map('map').setView([4.5,102],7);
+const map=L.map('map').setView([4.5,102],7);
 
 L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{maxZoom:19}
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 ).addTo(map);
 
-let markers=[];
-let filter="ALL";
 
-function setFilter(type){
+// reliable train icon
+const trainIcon=L.icon({
 
-filter=type;
+iconUrl:"https://cdn-icons-png.flaticon.com/512/481/481103.png",
+iconSize:[32,32]
 
-document.querySelectorAll("button")
-.forEach(btn=>btn.classList.remove("active"));
-
-document.getElementById("btn"+type)
-.classList.add("active");
-
-load();
-
-}
-
-function getType(label){
-
-if(label.includes("EMU") || label.includes("ETS"))
-return "ETS";
-
-return "KOMUTER";
-
-}
-
-function createMarker(train){
-
-const lat=train.vehicle.position.latitude;
-const lon=train.vehicle.position.longitude;
-const speed=train.vehicle.position.speed || 0;
-const label=train.vehicle.vehicle.label;
-
-const type=getType(label);
-
-if(filter!="ALL" && type!=filter)
-return null;
-
-const color = type=="ETS" ? "#00ffff" : "#00ff00";
-
-const marker = L.circleMarker([lat,lon],{
-
-radius:8,
-color:color,
-fillColor:color,
-fillOpacity:1,
-className:"blink"
-
-}).addTo(map);
-
-marker.bindPopup(
-
-"<b>"+label+"</b><br>"+
-"Type: "+type+"<br>"+
-"Speed: "+speed+" km/h<br>"+
-"Lat: "+lat.toFixed(5)+"<br>"+
-"Lon: "+lon.toFixed(5)
-
-);
-
-marker.bindTooltip(label,{
-permanent:true,
-direction:"top",
-className:"train-label"
 });
 
-return marker;
 
-}
+let markers={};
 
-async function load(){
 
-document.getElementById("status").innerText="Updating...";
+async function loadTrains(){
 
-markers.forEach(m=>map.removeLayer(m));
-markers=[];
+const res=await fetch("/api/ktmb");
 
-try{
+const data=await res.json();
 
-const res = await fetch("/api/ktmb");
-const data = await res.json();
+document.getElementById("count").innerText=data.entity.length;
 
-let count=0;
+document.getElementById("update").innerText=
+new Date().toLocaleTimeString();
+
+
+const list=document.getElementById("trainList");
+
+list.innerHTML="";
+
 
 data.entity.forEach(train=>{
 
-const marker=createMarker(train);
+if(!train.vehicle) return;
 
-if(marker){
+const lat=train.vehicle.position.latitude;
 
-markers.push(marker);
-count++;
+const lon=train.vehicle.position.longitude;
+
+const id=train.vehicle.vehicle.label;
+
+const speed=train.vehicle.position.speed;
+
+const status=speed>1?"MOVING":"STOPPED";
+
+
+if(markers[id]){
+
+markers[id].setLatLng([lat,lon]);
+
+}else{
+
+markers[id]=L.marker([lat,lon],{
+
+icon:trainIcon
+
+}).addTo(map)
+
+.bindPopup(
+
+"<b>"+id+"</b><br>"+
+"Speed: "+speed+" km/h<br>"+
+"Status: "+status
+
+);
 
 }
+
+
+// add to list panel
+
+const div=document.createElement("div");
+
+div.className="trainItem";
+
+div.innerHTML=
+"🚆 "+id+
+"<br><small class="+
+(speed>1?"statusMoving":"statusStopped")+
+">"+status+"</small>";
+
+div.onclick=()=>{
+
+map.setView([lat,lon],12);
+
+markers[id].openPopup();
+
+};
+
+list.appendChild(div);
 
 });
 
-document.getElementById("count").innerText=count;
-document.getElementById("status").innerText="LIVE";
-document.getElementById("lastupdate").innerText=
-"Last update: "+new Date().toLocaleTimeString();
-
-}catch(e){
-
-document.getElementById("status").innerText="ERROR";
-
 }
 
-}
 
-load();
+// first load
 
-setInterval(load,5000);
+loadTrains();
+
+
+// auto refresh
+
+setInterval(loadTrains,5000);
 
 </script>
 
