@@ -1,0 +1,23 @@
+body {
+  margin: 0;
+  background: #0b0f1a;
+  font-family: 'Segoe UI', sans-serif;
+  color: #00f0ff;
+}
+
+#map {
+  height: 100vh;
+}
+
+.topbar {
+  position: absolute;
+  z-index: 1000;
+  width: 100%;
+  padding: 15px;
+  background: rgba(0,0,0,0.8);
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  box-shadow: 0 0 15px #00f0ff;
+}
