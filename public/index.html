@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 <head>
 <meta charset="utf-8"/>
@@ -10,166 +11,109 @@
 
 body{
 margin:0;
-font-family:Segoe UI;
-background:#0b1220;
+background:#020617;
 color:white;
-overflow:hidden;
+font-family:Segoe UI,Arial;
 }
 
 #map{
 height:100vh;
-width:100%;
 }
 
-/* ===== LEFT PANEL ===== */
-
-#trainPanel{
-
+.panel{
 position:absolute;
-top:10px;
-left:10px;
-width:260px;
-max-height:90vh;
+top:15px;
+left:15px;
 background:rgba(15,23,42,0.95);
-border-radius:10px;
-padding:10px;
-overflow:auto;
-box-shadow:0 0 15px rgba(0,255,255,0.2);
-transition:0.3s;
+padding:18px;
+border-radius:12px;
+box-shadow:0 0 25px rgba(0,255,255,0.4);
+z-index:999;
+width:260px;
 }
 
-#trainPanel.collapsed{
-
-transform:translateX(-230px);
-
+.title{
+font-size:18px;
+color:#00ffff;
+margin-bottom:8px;
 }
 
-#togglePanel{
-
-position:absolute;
-top:10px;
-left:280px;
-background:#00ffff;
-color:black;
-border:none;
-padding:6px 10px;
-border-radius:6px;
-cursor:pointer;
-font-weight:bold;
-
+.stat{
+font-size:14px;
+margin-top:4px;
 }
 
-.trainItem{
-
-padding:6px;
-margin:4px 0;
-border-radius:6px;
-font-size:13px;
-display:flex;
-justify-content:space-between;
-align-items:center;
-
+.big{
+font-size:28px;
+color:#00ffff;
 }
 
-.moving{
-background:rgba(0,255,150,0.2);
+.active{
+color:#00ff88;
 }
 
 .stopped{
-background:rgba(255,200,0,0.2);
+color:#ff4d4d;
 }
 
-.offline{
-background:rgba(255,0,0,0.2);
+.lastupdate{
+font-size:12px;
+color:#94a3b8;
+margin-top:6px;
 }
 
-/* ===== DOT TRAIN ICON ===== */
+.train-label{
+font-size:12px;
+font-weight:bold;
+color:white;
+text-shadow:0 0 6px black;
+}
 
-.trainDot{
-
+.dot{
 width:12px;
 height:12px;
 border-radius:50%;
-display:inline-block;
-margin-right:5px;
-
 }
 
-.dotMoving{
-
-background:#00ff9d;
-box-shadow:0 0 10px #00ff9d;
-animation:blink 1s infinite;
-
+.dot-active{
+background:#00ff88;
+box-shadow:0 0 10px #00ff88;
 }
 
-.dotStopped{
-
-background:#ffaa00;
-
-}
-
-.dotOffline{
-
-background:red;
-
-}
-
-@keyframes blink{
-
-0%{opacity:1;}
-50%{opacity:0.2;}
-100%{opacity:1;}
-
-}
-
-/* ===== NAME LABEL ===== */
-
-.trainLabel{
-
-color:#00ffff;
-font-size:12px;
-font-weight:bold;
-text-shadow:0 0 3px black;
-
-}
-
-/* ===== STATS PANEL ===== */
-
-#stats{
-
-position:absolute;
-top:10px;
-right:10px;
-background:rgba(15,23,42,0.95);
-padding:10px;
-border-radius:10px;
-font-size:13px;
+.dot-stopped{
+background:#ff4d4d;
+box-shadow:0 0 10px #ff4d4d;
 }
 
 </style>
 
 </head>
+
 <body>
 
 <div id="map"></div>
 
-<div id="trainPanel">
+<div class="panel">
 
-<h3>🚆 Train List</h3>
+<div class="title">KTMB Command Center</div>
 
-<div id="trainList"></div>
+<div class="big" id="total">0</div>
 
+<div class="stat active">
+Active: <span id="activeCount">0</span>
 </div>
 
-<button id="togglePanel">☰</button>
+<div class="stat stopped">
+Stopped / Offline: <span id="stoppedCount">0</span>
+</div>
 
-<div id="stats">
+<div class="stat" id="systemStatus">
+System: Connecting...
+</div>
 
-Active: <span id="activeCount">0</span><br>
-Stopped: <span id="stopCount">0</span><br>
-Offline: <span id="offlineCount">0</span><br>
-Last Update: <span id="lastUpdate">--</span>
+<div class="lastupdate" id="lastUpdate">
+Last update: -
+</div>
 
 </div>
 
@@ -177,193 +121,128 @@ Last Update: <span id="lastUpdate">--</span>
 
 <script>
 
-// ===== MAP =====
+const map = L.map('map').setView([4.5,102],7);
 
-var map = L.map('map').setView([3.139,101.686],7);
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{maxZoom:19}
+).addTo(map);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-maxZoom:18
-}).addTo(map);
+let markers = {};
 
+function createDot(active){
 
-// ===== TRAIN DATA SIMULATION =====
+const className = active ? "dot dot-active" : "dot dot-stopped";
 
-var trains = [
+return L.divIcon({
 
-{name:"ETS 9210",lat:3.139,lon:101.686,speed:90,lastMove:Date.now()},
-{name:"Komuter 2304",lat:3.073,lon:101.518,speed:0,lastMove:Date.now()-40000},
-{name:"ETS 9301",lat:4.597,lon:101.090,speed:120,lastMove:Date.now()},
-{name:"Komuter 2215",lat:1.492,lon:103.741,speed:0,lastMove:Date.now()-120000},
-
-];
-
-
-var markers={};
-var labels={};
-
-
-// ===== CREATE MARKERS =====
-
-function createMarkers(){
-
-trains.forEach(train=>{
-
-var dotClass = getDotClass(train);
-
-var icon = L.divIcon({
-className:'',
-html:`<div class="trainDot ${dotClass}"></div>`
-});
-
-var marker = L.marker([train.lat,train.lon],{icon}).addTo(map);
-
-marker.bindPopup(()=>`
-<b>${train.name}</b><br>
-Speed: ${train.speed} km/h<br>
-Lat: ${train.lat.toFixed(5)}<br>
-Lon: ${train.lon.toFixed(5)}
-`);
-
-var label = L.marker([train.lat,train.lon],{
-
-icon:L.divIcon({
-
-className:'trainLabel',
-html:train.name
-
-})
-
-}).addTo(map);
-
-markers[train.name]=marker;
-labels[train.name]=label;
+html:`<div class="${className}"></div>`,
+iconSize:[12,12]
 
 });
 
 }
 
+function isActive(speed,timestamp){
 
-// ===== STATUS DETECTION =====
+const now = Date.now()/1000;
+const age = now - timestamp;
 
-function getStatus(train){
-
-var diff=(Date.now()-train.lastMove)/1000;
-
-if(diff>60) return "offline";
-if(train.speed==0) return "stopped";
-
-return "moving";
+return speed > 1 && age < 120;
 
 }
 
+async function loadTrains(){
 
-function getDotClass(train){
+document.getElementById("systemStatus").innerText="System: Updating...";
 
-var status=getStatus(train);
+try{
 
-if(status=="moving") return "dotMoving";
-if(status=="stopped") return "dotStopped";
-return "dotOffline";
+const res = await fetch("/api/ktmb");
+const data = await res.json();
 
-}
+let activeCount=0;
+let stoppedCount=0;
 
+data.entity.forEach(train=>{
 
-// ===== UPDATE UI =====
+const id = train.id;
 
-function updateUI(){
+const lat = train.vehicle.position.latitude;
+const lon = train.vehicle.position.longitude;
+const speed = train.vehicle.position.speed || 0;
+const timestamp = parseInt(train.vehicle.timestamp);
 
-var active=0;
-var stop=0;
-var offline=0;
+const label = train.vehicle.vehicle.label;
 
-var listHTML="";
+const active = isActive(speed,timestamp);
 
-trains.forEach(train=>{
+if(active) activeCount++;
+else stoppedCount++;
 
-var status=getStatus(train);
+if(!markers[id]){
 
-if(status=="moving") active++;
-else if(status=="stopped") stop++;
-else offline++;
+const marker = L.marker(
+[lat,lon],
+{icon:createDot(active)}
+).addTo(map);
 
-listHTML+=`
+marker.bindTooltip(label,{
+permanent:true,
+direction:"top",
+className:"train-label"
+});
 
-<div class="trainItem ${status}">
-<span>
-<div class="trainDot ${getDotClass(train)}"></div>
-${train.name}
-</span>
+marker.on("click",()=>{
 
-<span>${status}</span>
-
-</div>
-
-`;
+marker.bindPopup(
+"<b>"+label+"</b><br>"+
+"Speed: "+speed+" km/h<br>"+
+"Lat: "+lat.toFixed(5)+"<br>"+
+"Lon: "+lon.toFixed(5)+"<br>"+
+"Status: "+(active?"ACTIVE":"STOPPED")
+).openPopup();
 
 });
 
-document.getElementById("trainList").innerHTML=listHTML;
+markers[id]=marker;
 
-document.getElementById("activeCount").innerText=active;
-document.getElementById("stopCount").innerText=stop;
-document.getElementById("offlineCount").innerText=offline;
-document.getElementById("lastUpdate").innerText=new Date().toLocaleTimeString();
+}else{
 
-}
-
-
-// ===== SIMULATE MOVEMENT =====
-
-function simulate(){
-
-trains.forEach(train=>{
-
-if(train.speed>0){
-
-train.lat+=((Math.random()-0.5)/100);
-train.lon+=((Math.random()-0.5)/100);
-
-train.lastMove=Date.now();
+markers[id].setLatLng([lat,lon]);
+markers[id].setIcon(createDot(active));
 
 }
-
-var marker=markers[train.name];
-var label=labels[train.name];
-
-marker.setLatLng([train.lat,train.lon]);
-label.setLatLng([train.lat,train.lon]);
-
-marker.setIcon(L.divIcon({
-
-className:'',
-html:`<div class="trainDot ${getDotClass(train)}"></div>`
-
-}));
 
 });
 
-updateUI();
+document.getElementById("total").innerText =
+activeCount+stoppedCount;
+
+document.getElementById("activeCount").innerText =
+activeCount;
+
+document.getElementById("stoppedCount").innerText =
+stoppedCount;
+
+document.getElementById("systemStatus").innerText =
+"System: LIVE";
+
+document.getElementById("lastUpdate").innerText =
+"Last update: "+new Date().toLocaleTimeString();
+
+}catch(e){
+
+document.getElementById("systemStatus").innerText =
+"System: ERROR";
 
 }
 
+}
 
-// ===== PANEL TOGGLE =====
+loadTrains();
 
-document.getElementById("togglePanel").onclick=function(){
-
-var panel=document.getElementById("trainPanel");
-
-panel.classList.toggle("collapsed");
-
-};
-
-
-// ===== START =====
-
-createMarkers();
-updateUI();
-
-setInterval(simulate,3000);
+setInterval(loadTrains,5000);
 
 </script>
 
