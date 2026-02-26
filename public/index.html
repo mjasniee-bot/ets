@@ -1,104 +1,51 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
+<meta charset="UTF-8">
 <title>KTMB Command Center</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
-
 body{
-margin:0;
-background:#0a0f1c;
-font-family:Segoe UI;
-color:#00ffc3;
+    margin:0;
+    background:#0b0f1a;
+    color:#00ffc3;
+    font-family:Segoe UI;
 }
 
 #map{
-height:100vh;
+    height:100vh;
 }
 
 .panel{
-
-position:absolute;
-left:0;
-top:0;
-width:320px;
-height:100%;
-background:rgba(0,0,0,0.85);
-padding:15px;
-overflow:auto;
-box-shadow:0 0 25px #00ffc3;
-z-index:999;
-
+    position:absolute;
+    top:20px;
+    left:20px;
+    background:rgba(0,0,0,0.8);
+    padding:15px;
+    border-radius:10px;
+    box-shadow:0 0 20px #00ffc3;
 }
 
 .title{
-
-font-size:20px;
-font-weight:bold;
-margin-bottom:15px;
-
+    font-size:20px;
+    font-weight:bold;
 }
 
 .stat{
-
-margin:5px 0;
-
+    margin-top:5px;
+    font-size:14px;
 }
-
-.trainItem{
-
-padding:6px;
-margin:4px 0;
-background:#111;
-cursor:pointer;
-border-radius:4px;
-
-}
-
-.trainItem:hover{
-
-background:#00ffc3;
-color:black;
-
-}
-
-.statusMoving{
-
-color:#00ff00;
-
-}
-
-.statusStopped{
-
-color:#ff4444;
-
-}
-
 </style>
-
 </head>
 
 <body>
 
 <div class="panel">
-
-<div class="title">KTMB Command Center</div>
-
-<div class="stat">
-Active trains: <span id="count">0</span>
-</div>
-
-<div class="stat">
-Last update: <span id="update">--</span>
-</div>
-
-<hr>
-
-<div id="trainList"></div>
-
+<div class="title">🛰 KTMB Command Center</div>
+<div class="stat">🚆 Active trains: <span id="count">0</span></div>
+<div class="stat">🕒 Last update: <span id="time">--</span></div>
 </div>
 
 <div id="map"></div>
@@ -107,116 +54,59 @@ Last update: <span id="update">--</span>
 
 <script>
 
-const map=L.map('map').setView([4.5,102],7);
+const map = L.map('map').setView([4.5,102],7);
 
 L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 ).addTo(map);
 
-
-// reliable train icon
-  //https://www.flaticon.com/free-icon/train_821405?k=1772067615323
-  //https://cdn-icons-png.flaticon.com/512/481/481103.png
-const trainIcon=L.icon({
-
-iconUrl:"https://cdn-icons-png.flaticon.com/512/685/685352.png",
-iconSize:[32,32]
-
+const trainIcon = L.icon({
+    iconUrl: 'https://cdn-icons-png.flaticon.com/512/685/685352.png',
+    iconSize:[32,32]
 });
 
-
-let markers={};
-
+let markers = {};
 
 async function loadTrains(){
 
-const res=await fetch("/api/ktmb");
+    const res = await fetch('/api/ktmb');
+    const data = await res.json();
 
-const data=await res.json();
+    document.getElementById("count").innerText =
+        data.entity.length;
 
-document.getElementById("count").innerText=data.entity.length;
+    document.getElementById("time").innerText =
+        new Date().toLocaleTimeString();
 
-document.getElementById("update").innerText=
-new Date().toLocaleTimeString();
+    data.entity.forEach(train=>{
 
+        if(!train.vehicle) return;
 
-const list=document.getElementById("trainList");
+        const lat = train.vehicle.position.latitude;
+        const lon = train.vehicle.position.longitude;
+        const id = train.vehicle.vehicle.label;
 
-list.innerHTML="";
+        if(markers[id]){
 
+            markers[id].setLatLng([lat,lon]);
 
-data.entity.forEach(train=>{
+        }else{
 
-if(!train.vehicle) return;
+            markers[id] = L.marker([lat,lon],{
+                icon:trainIcon
+            }).addTo(map)
+            .bindTooltip(
+                "🚆 "+id,
+                {permanent:true}
+            );
 
-const lat=train.vehicle.position.latitude;
+        }
 
-const lon=train.vehicle.position.longitude;
-
-const id=train.vehicle.vehicle.label;
-
-const speed=train.vehicle.position.speed;
-
-const status=speed>1?"MOVING":"STOPPED";
-
-
-if(markers[id]){
-
-markers[id].setLatLng([lat,lon]);
-
-}else{
-
-markers[id]=L.marker([lat,lon],{
-
-icon:trainIcon
-
-}).addTo(map)
-
-.bindPopup(
-
-"<b>"+id+"</b><br>"+
-"Speed: "+speed+" km/h<br>"+
-"Status: "+status
-
-);
+    });
 
 }
-
-
-// add to list panel
-
-const div=document.createElement("div");
-
-div.className="trainItem";
-
-div.innerHTML=
-"🚆 "+id+
-"<br><small class="+
-(speed>1?"statusMoving":"statusStopped")+
-">"+status+"</small>";
-
-div.onclick=()=>{
-
-map.setView([lat,lon],12);
-
-markers[id].openPopup();
-
-};
-
-list.appendChild(div);
-
-});
-
-}
-
-
-// first load
 
 loadTrains();
-
-
-// auto refresh
-
 setInterval(loadTrains,5000);
 
 </script>
