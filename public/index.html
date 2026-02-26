@@ -2,50 +2,90 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>KTMB Command Center</title>
+<title>KTMB Command Center v3</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
 <style>
+
 body{
-    margin:0;
-    background:#0b0f1a;
-    color:#00ffc3;
-    font-family:Segoe UI;
+margin:0;
+background:#050a14;
+color:#00ffe1;
+font-family:Consolas,Segoe UI;
+overflow:hidden;
 }
 
 #map{
-    height:100vh;
+height:100vh;
 }
 
 .panel{
-    position:absolute;
-    top:20px;
-    left:20px;
-    background:rgba(0,0,0,0.8);
-    padding:15px;
-    border-radius:10px;
-    box-shadow:0 0 20px #00ffc3;
+position:absolute;
+top:0;
+left:0;
+width:320px;
+height:100%;
+background:rgba(0,0,0,0.85);
+padding:20px;
+box-shadow:0 0 30px #00ffe1;
+z-index:999;
 }
 
 .title{
-    font-size:20px;
-    font-weight:bold;
+font-size:22px;
+margin-bottom:20px;
 }
 
 .stat{
-    margin-top:5px;
-    font-size:14px;
+margin:10px 0;
 }
+
+.button{
+margin-top:10px;
+padding:8px;
+background:#00ffe1;
+color:black;
+cursor:pointer;
+text-align:center;
+border-radius:5px;
+}
+
+.telemetry{
+margin-top:20px;
+font-size:13px;
+line-height:1.6;
+}
+
+.blink{
+animation: blink 1s infinite;
+}
+
+@keyframes blink{
+0%{opacity:1;}
+50%{opacity:0.3;}
+100%{opacity:1;}
+}
+
 </style>
 </head>
 
 <body>
 
 <div class="panel">
-<div class="title">🛰 KTMB Command Center</div>
-<div class="stat">🚆 Active trains: <span id="count">0</span></div>
-<div class="stat">🕒 Last update: <span id="time">--</span></div>
+
+<div class="title">🛰 KTMB COMMAND CENTER</div>
+
+<div class="stat">Active trains: <span id="count">0</span></div>
+<div class="stat">System time: <span id="time">--</span></div>
+
+<div class="button" onclick="centerMap()">CENTER MALAYSIA</div>
+<div class="button" onclick="loadTrains()">REFRESH NOW</div>
+
+<div class="telemetry" id="telemetry">
+Click train to view telemetry
+</div>
+
 </div>
 
 <div id="map"></div>
@@ -56,58 +96,83 @@ body{
 
 const map = L.map('map').setView([4.5,102],7);
 
-L.tileLayer(
+const normalLayer = L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-).addTo(map);
+);
+
+const satelliteLayer = L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+);
+
+satelliteLayer.addTo(map);
 
 const trainIcon = L.icon({
-    iconUrl: 'https://cdn-icons-png.flaticon.com/512/685/685352.png',
-    iconSize:[32,32]
+iconUrl:'https://cdn-icons-png.flaticon.com/512/685/685352.png',
+iconSize:[35,35]
 });
 
-let markers = {};
+let markers={};
+
+function centerMap(){
+
+map.setView([4.5,102],7);
+
+}
 
 async function loadTrains(){
 
-    const res = await fetch('/api/ktmb');
-    const data = await res.json();
+const res = await fetch('/api/ktmb');
+const data = await res.json();
 
-    document.getElementById("count").innerText =
-        data.entity.length;
+document.getElementById("count").innerText=data.entity.length;
+document.getElementById("time").innerText=new Date().toLocaleTimeString();
 
-    document.getElementById("time").innerText =
-        new Date().toLocaleTimeString();
+data.entity.forEach(train=>{
 
-    data.entity.forEach(train=>{
+if(!train.vehicle) return;
 
-        if(!train.vehicle) return;
+const lat=train.vehicle.position.latitude;
+const lon=train.vehicle.position.longitude;
 
-        const lat = train.vehicle.position.latitude;
-        const lon = train.vehicle.position.longitude;
-        const id = train.vehicle.vehicle.label;
+const id=train.vehicle.vehicle.label;
+const speed=train.vehicle.position.speed;
+const trip=train.vehicle.trip.tripId;
 
-        if(markers[id]){
+if(markers[id]){
 
-            markers[id].setLatLng([lat,lon]);
+markers[id].setLatLng([lat,lon]);
 
-        }else{
+}else{
 
-            markers[id] = L.marker([lat,lon],{
-                icon:trainIcon
-            }).addTo(map)
-            .bindTooltip(
-                "🚆 "+id,
-                {permanent:true}
-            );
+const marker=L.marker([lat,lon],{icon:trainIcon})
+.addTo(map)
+.bindTooltip("🚆 "+id,{permanent:true});
 
-        }
+marker.on("click",()=>{
 
-    });
+document.getElementById("telemetry").innerHTML=
+`
+<b>Train:</b> ${id}<br>
+<b>Trip:</b> ${trip}<br>
+<b>Speed:</b> ${speed} km/h<br>
+<b>Lat:</b> ${lat.toFixed(5)}<br>
+<b>Lon:</b> ${lon.toFixed(5)}<br>
+<b>Status:</b> ACTIVE
+`;
+
+});
+
+markers[id]=marker;
+
+}
+
+});
 
 }
 
 loadTrains();
-setInterval(loadTrains,5000);
+
+setInterval(loadTrains,4000);
 
 </script>
 
