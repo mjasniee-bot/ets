@@ -3,8 +3,7 @@
 <html>
 <head>
 <meta charset="utf-8"/>
-
-<title>KTMB Command Center Level 5</title>
+<title>KTMB Command Center</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -12,9 +11,9 @@
 
 body{
 margin:0;
-background:#020617;
+background:#0b1220;
 color:white;
-font-family:Segoe UI,Arial;
+font-family:Segoe UI, Arial;
 }
 
 #map{
@@ -26,50 +25,59 @@ height:100vh;
 position:absolute;
 top:15px;
 left:15px;
-background:rgba(15,23,42,0.95);
-padding:18px;
-border-radius:12px;
-box-shadow:0 0 25px rgba(0,255,255,0.5);
+background:#0f172a;
+padding:15px;
+border-radius:10px;
+box-shadow:0 0 20px rgba(0,255,255,0.4);
 z-index:999;
-width:260px;
+min-width:240px;
 
 }
 
 .title{
+
 font-size:18px;
+margin-bottom:10px;
 color:#00ffff;
-margin-bottom:8px;
+
 }
 
 .counter{
-font-size:34px;
+
+font-size:32px;
 color:#00ffff;
+
 }
 
 .status{
+
+margin-top:5px;
 font-size:14px;
-margin-top:4px;
+
 }
 
 .lastupdate{
+
 font-size:12px;
 color:#94a3b8;
-margin-top:2px;
+
 }
 
 .filter{
-margin-top:12px;
+
+margin-top:10px;
+
 }
 
 button{
 
-background:#0f172a;
+background:#1e293b;
 color:white;
-border:1px solid #334155;
+border:none;
 padding:6px 12px;
-margin-right:4px;
-border-radius:6px;
+margin-right:5px;
 cursor:pointer;
+border-radius:6px;
 
 }
 
@@ -82,10 +90,10 @@ color:black;
 
 .train-label{
 
-font-size:12px;
-font-weight:bold;
+font-size:11px;
 color:white;
-text-shadow:0 0 6px black;
+font-weight:bold;
+text-shadow:0 0 5px black;
 
 }
 
@@ -133,93 +141,62 @@ animation:blink 1s infinite;
 
 <script>
 
-const map = L.map('map',{zoomControl:true})
-.setView([4.5,102],7);
+const map = L.map('map').setView([4.5,102],7);
 
 L.tileLayer(
 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 {maxZoom:19}
 ).addTo(map);
 
-let trains={}
-let filter="ALL"
+let markers=[];
+let filter="ALL";
 
 function setFilter(type){
 
-filter=type
+filter=type;
 
 document.querySelectorAll("button")
-.forEach(b=>b.classList.remove("active"))
+.forEach(btn=>btn.classList.remove("active"));
 
 document.getElementById("btn"+type)
-.classList.add("active")
+.classList.add("active");
 
-refresh()
+load();
 
 }
 
 function getType(label){
 
-if(label.includes("EMU")||label.includes("ETS"))
-return "ETS"
+if(label.includes("EMU") || label.includes("ETS"))
+return "ETS";
 
-return "KOMUTER"
-
-}
-
-function createIcon(type){
-
-const color = type=="ETS"?"#00ffff":"#00ff00"
-
-return L.divIcon({
-
-html:`
-<div class="blink"
-style="
-width:12px;
-height:12px;
-background:${color};
-border-radius:50%;
-box-shadow:0 0 10px ${color};
-">
-</div>
-`,
-
-iconSize:[12,12]
-
-})
+return "KOMUTER";
 
 }
 
-function updateTrain(id,data){
+function createMarker(train){
 
-const lat=data.vehicle.position.latitude
-const lon=data.vehicle.position.longitude
-const speed=data.vehicle.position.speed||0
-const label=data.vehicle.vehicle.label
-const type=getType(label)
+const lat=train.vehicle.position.latitude;
+const lon=train.vehicle.position.longitude;
+const speed=train.vehicle.position.speed || 0;
+const label=train.vehicle.vehicle.label;
 
-if(filter!="ALL" && type!=filter){
+const type=getType(label);
 
-if(trains[id]){
-map.removeLayer(trains[id].marker)
-delete trains[id]
-}
+if(filter!="ALL" && type!=filter)
+return null;
 
-return
-}
+const color = type=="ETS" ? "#00ffff" : "#00ff00";
 
-if(!trains[id]){
+const marker = L.circleMarker([lat,lon],{
 
-const marker=L.marker([lat,lon],{
-icon:createIcon(type)
-}).addTo(map)
+radius:8,
+color:color,
+fillColor:color,
+fillOpacity:1,
+className:"blink"
 
-marker.bindTooltip(label,{
-permanent:true,
-direction:"top",
-className:"train-label"
-})
+}).addTo(map);
 
 marker.bindPopup(
 
@@ -229,55 +206,61 @@ marker.bindPopup(
 "Lat: "+lat.toFixed(5)+"<br>"+
 "Lon: "+lon.toFixed(5)
 
-)
+);
 
-trains[id]={marker}
+marker.bindTooltip(label,{
+permanent:true,
+direction:"top",
+className:"train-label"
+});
 
-}else{
-
-// smooth move animation
-trains[id].marker.setLatLng([lat,lon])
+return marker;
 
 }
 
-}
+async function load(){
 
-async function refresh(){
+document.getElementById("status").innerText="Updating...";
 
-document.getElementById("status").innerText="Updating..."
+markers.forEach(m=>map.removeLayer(m));
+markers=[];
 
 try{
 
-const res=await fetch("/api/ktmb")
-const data=await res.json()
+const res = await fetch("/api/ktmb");
+const data = await res.json();
 
-let count=0
+let count=0;
 
 data.entity.forEach(train=>{
 
-updateTrain(train.id,train)
+const marker=createMarker(train);
 
-if(filter=="ALL" || getType(train.vehicle.vehicle.label)==filter)
-count++
+if(marker){
 
-})
+markers.push(marker);
+count++;
 
-document.getElementById("count").innerText=count
-document.getElementById("status").innerText="LIVE"
+}
+
+});
+
+document.getElementById("count").innerText=count;
+document.getElementById("status").innerText="LIVE";
 document.getElementById("lastupdate").innerText=
-"Last update: "+new Date().toLocaleTimeString()
+"Last update: "+new Date().toLocaleTimeString();
 
 }catch(e){
 
-document.getElementById("status").innerText="ERROR"
+document.getElementById("status").innerText="ERROR";
 
 }
 
 }
 
-refresh()
+load();
 
-setInterval(refresh,4000)
+setInterval(load,5000);
 
 </script>
 
