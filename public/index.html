@@ -1,9 +1,8 @@
 <!DOCTYPE html>
-
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
-<title>KTMB Command Center Level 4 Professional</title>
+<meta charset="UTF-8">
+<title>KTMB Command Center v3</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
@@ -11,9 +10,10 @@
 
 body{
 margin:0;
-background:#020617;
-color:white;
-font-family:Segoe UI,Arial;
+background:#050a14;
+color:#00ffe1;
+font-family:Consolas,Segoe UI;
+overflow:hidden;
 }
 
 #map{
@@ -22,100 +22,73 @@ height:100vh;
 
 .panel{
 position:absolute;
-top:15px;
-left:15px;
-background:rgba(15,23,42,0.95);
-padding:18px;
-border-radius:12px;
-box-shadow:0 0 25px rgba(0,255,255,0.4);
+top:0;
+left:0;
+width:320px;
+height:100%;
+background:rgba(0,0,0,0.85);
+padding:20px;
+box-shadow:0 0 30px #00ffe1;
 z-index:999;
-width:260px;
 }
 
 .title{
-font-size:18px;
-color:#00ffff;
-margin-bottom:8px;
+font-size:22px;
+margin-bottom:20px;
 }
 
 .stat{
-font-size:14px;
-margin-top:4px;
+margin:10px 0;
 }
 
-.big{
-font-size:28px;
-color:#00ffff;
+.button{
+margin-top:10px;
+padding:8px;
+background:#00ffe1;
+color:black;
+cursor:pointer;
+text-align:center;
+border-radius:5px;
 }
 
-.active{
-color:#00ff88;
+.telemetry{
+margin-top:20px;
+font-size:13px;
+line-height:1.6;
 }
 
-.stopped{
-color:#ff4d4d;
+.blink{
+animation: blink 1s infinite;
 }
 
-.lastupdate{
-font-size:12px;
-color:#94a3b8;
-margin-top:6px;
-}
-
-.train-label{
-font-size:12px;
-font-weight:bold;
-color:white;
-text-shadow:0 0 6px black;
-}
-
-.dot{
-width:12px;
-height:12px;
-border-radius:50%;
-}
-
-.dot-active{
-background:#00ff88;
-box-shadow:0 0 10px #00ff88;
-}
-
-.dot-stopped{
-background:#ff4d4d;
-box-shadow:0 0 10px #ff4d4d;
+@keyframes blink{
+0%{opacity:1;}
+50%{opacity:0.3;}
+100%{opacity:1;}
 }
 
 </style>
-
 </head>
 
 <body>
 
-<div id="map"></div>
-
 <div class="panel">
 
-<div class="title">KTMB Command Center</div>
+<div class="title">🛰 KTMB COMMAND CENTER</div>
 
-<div class="big" id="total">0</div>
+<div class="stat">Active trains: <span id="count">0</span></div>
+<div class="stat">System time: <span id="time">--</span></div>
 
-<div class="stat active">
-Active: <span id="activeCount">0</span>
-</div>
+<div class="button" onclick="centerMap()">CENTER MALAYSIA</div>
+<div class="button" onclick="loadTrains()">REFRESH NOW</div>
 
-<div class="stat stopped">
-Stopped / Offline: <span id="stoppedCount">0</span>
-</div>
-
-<div class="stat" id="systemStatus">
-System: Connecting...
-</div>
-
-<div class="lastupdate" id="lastUpdate">
-Last update: -
+<div class="telemetry" id="telemetry">
+Click train to view telemetry
 </div>
 
 </div>
+
+<div id="map"></div>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
@@ -123,126 +96,83 @@ Last update: -
 
 const map = L.map('map').setView([4.5,102],7);
 
-L.tileLayer(
-'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-{maxZoom:19}
-).addTo(map);
+const normalLayer = L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+);
 
-let markers = {};
+const satelliteLayer = L.tileLayer(
+'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+);
 
-function createDot(active){
+satelliteLayer.addTo(map);
 
-const className = active ? "dot dot-active" : "dot dot-stopped";
-
-return L.divIcon({
-
-html:`<div class="${className}"></div>`,
-iconSize:[12,12]
-
+const trainIcon = L.icon({
+iconUrl:'https://cdn-icons-png.flaticon.com/512/685/685352.png',
+iconSize:[35,35]
 });
 
-}
+let markers={};
 
-function isActive(speed,timestamp){
+function centerMap(){
 
-const now = Date.now()/1000;
-const age = now - timestamp;
-
-return speed > 1 && age < 120;
+map.setView([4.5,102],7);
 
 }
 
 async function loadTrains(){
 
-document.getElementById("systemStatus").innerText="System: Updating...";
-
-try{
-
-const res = await fetch("/api/ktmb");
+const res = await fetch('/api/ktmb');
 const data = await res.json();
 
-let activeCount=0;
-let stoppedCount=0;
+document.getElementById("count").innerText=data.entity.length;
+document.getElementById("time").innerText=new Date().toLocaleTimeString();
 
 data.entity.forEach(train=>{
 
-const id = train.id;
+if(!train.vehicle) return;
 
-const lat = train.vehicle.position.latitude;
-const lon = train.vehicle.position.longitude;
-const speed = train.vehicle.position.speed || 0;
-const timestamp = parseInt(train.vehicle.timestamp);
+const lat=train.vehicle.position.latitude;
+const lon=train.vehicle.position.longitude;
 
-const label = train.vehicle.vehicle.label;
+const id=train.vehicle.vehicle.label;
+const speed=train.vehicle.position.speed;
+const trip=train.vehicle.trip.tripId;
 
-const active = isActive(speed,timestamp);
+if(markers[id]){
 
-if(active) activeCount++;
-else stoppedCount++;
+markers[id].setLatLng([lat,lon]);
 
-if(!markers[id]){
+}else{
 
-const marker = L.marker(
-[lat,lon],
-{icon:createDot(active)}
-).addTo(map);
-
-marker.bindTooltip(label,{
-permanent:true,
-direction:"top",
-className:"train-label"
-});
+const marker=L.marker([lat,lon],{icon:trainIcon})
+.addTo(map)
+.bindTooltip("🚆 "+id,{permanent:true});
 
 marker.on("click",()=>{
 
-marker.bindPopup(
-"<b>"+label+"</b><br>"+
-"Speed: "+speed+" km/h<br>"+
-"Lat: "+lat.toFixed(5)+"<br>"+
-"Lon: "+lon.toFixed(5)+"<br>"+
-"Status: "+(active?"ACTIVE":"STOPPED")
-).openPopup();
+document.getElementById("telemetry").innerHTML=
+`
+<b>Train:</b> ${id}<br>
+<b>Trip:</b> ${trip}<br>
+<b>Speed:</b> ${speed} km/h<br>
+<b>Lat:</b> ${lat.toFixed(5)}<br>
+<b>Lon:</b> ${lon.toFixed(5)}<br>
+<b>Status:</b> ACTIVE
+`;
 
 });
 
 markers[id]=marker;
 
-}else{
-
-markers[id].setLatLng([lat,lon]);
-markers[id].setIcon(createDot(active));
-
 }
 
 });
-
-document.getElementById("total").innerText =
-activeCount+stoppedCount;
-
-document.getElementById("activeCount").innerText =
-activeCount;
-
-document.getElementById("stoppedCount").innerText =
-stoppedCount;
-
-document.getElementById("systemStatus").innerText =
-"System: LIVE";
-
-document.getElementById("lastUpdate").innerText =
-"Last update: "+new Date().toLocaleTimeString();
-
-}catch(e){
-
-document.getElementById("systemStatus").innerText =
-"System: ERROR";
-
-}
 
 }
 
 loadTrains();
 
-setInterval(loadTrains,5000);
+setInterval(loadTrains,4000);
 
 </script>
 
