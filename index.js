@@ -1,39 +1,223 @@
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
-const path = require("path");
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>KTMB Command Center</title>
 
-const app = express();
-const PORT = process.env.PORT || 8080;
-const GtfsRealtimeBindings = require("gtfs-realtime-bindings");
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
+<style>
 
-app.get("/", (req, res) => {
-  res.send("Production server is LIVE 🚀");
+body{
+margin:0;
+background:#0a0f1c;
+font-family:Segoe UI;
+color:#00ffc3;
+}
+
+#map{
+height:100vh;
+}
+
+.panel{
+
+position:absolute;
+left:0;
+top:0;
+width:320px;
+height:100%;
+background:rgba(0,0,0,0.85);
+padding:15px;
+overflow:auto;
+box-shadow:0 0 25px #00ffc3;
+z-index:999;
+
+}
+
+.title{
+
+font-size:20px;
+font-weight:bold;
+margin-bottom:15px;
+
+}
+
+.stat{
+
+margin:5px 0;
+
+}
+
+.trainItem{
+
+padding:6px;
+margin:4px 0;
+background:#111;
+cursor:pointer;
+border-radius:4px;
+
+}
+
+.trainItem:hover{
+
+background:#00ffc3;
+color:black;
+
+}
+
+.statusMoving{
+
+color:#00ff00;
+
+}
+
+.statusStopped{
+
+color:#ff4444;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="panel">
+
+<div class="title">KTMB Command Center</div>
+
+<div class="stat">
+Active trains: <span id="count">0</span>
+</div>
+
+<div class="stat">
+Last update: <span id="update">--</span>
+</div>
+
+<hr>
+
+<div id="trainList"></div>
+
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script>
+
+const map=L.map('map').setView([4.5,102],7);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+).addTo(map);
+
+
+// reliable train icon
+const trainIcon=L.icon({
+
+iconUrl:"https://cdn-icons-png.flaticon.com/512/481/481103.png",
+iconSize:[32,32]
+
 });
 
-// 👇 WAJIB ADA NI
-app.get("/api/ktmb", async (req, res) => {
-  try {
-    const response = await axios.get(
-      "https://api.data.gov.my/gtfs-realtime/vehicle-position/ktmb",
-      { responseType: "arraybuffer" } // penting!
-    );
 
-    const feed = GtfsRealtimeBindings.transit_realtime.FeedMessage.decode(
-      new Uint8Array(response.data)
-    );
+let markers={};
 
-    res.json(feed);
-  } catch (error) {
-    console.error("KTMB API Error:", error.message);
-    res.status(500).json({ error: "Failed to fetch KTMB data" });
-  }
+
+async function loadTrains(){
+
+const res=await fetch("/api/ktmb");
+
+const data=await res.json();
+
+document.getElementById("count").innerText=data.entity.length;
+
+document.getElementById("update").innerText=
+new Date().toLocaleTimeString();
+
+
+const list=document.getElementById("trainList");
+
+list.innerHTML="";
+
+
+data.entity.forEach(train=>{
+
+if(!train.vehicle) return;
+
+const lat=train.vehicle.position.latitude;
+
+const lon=train.vehicle.position.longitude;
+
+const id=train.vehicle.vehicle.label;
+
+const speed=train.vehicle.position.speed;
+
+const status=speed>1?"MOVING":"STOPPED";
+
+
+if(markers[id]){
+
+markers[id].setLatLng([lat,lon]);
+
+}else{
+
+markers[id]=L.marker([lat,lon],{
+
+icon:trainIcon
+
+}).addTo(map)
+
+.bindPopup(
+
+"<b>"+id+"</b><br>"+
+"Speed: "+speed+" km/h<br>"+
+"Status: "+status
+
+);
+
+}
+
+
+// add to list panel
+
+const div=document.createElement("div");
+
+div.className="trainItem";
+
+div.innerHTML=
+"🚆 "+id+
+"<br><small class="+
+(speed>1?"statusMoving":"statusStopped")+
+">"+status+"</small>";
+
+div.onclick=()=>{
+
+map.setView([lat,lon],12);
+
+markers[id].openPopup();
+
+};
+
+list.appendChild(div);
+
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+}
+
+
+// first load
+
+loadTrains();
+
+
+// auto refresh
+
+setInterval(loadTrains,5000);
+
+</script>
+
+</body>
+</html>
