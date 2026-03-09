@@ -19,7 +19,7 @@ app.get("/", (req, res) => {
 app.get("/api/ktmb", async (req, res) => {
   try {
     const response = await axios.get(
-      "https://api.data.gov.my/gtfs-realtime/vehicle-position/ktmb",
+      "https://api.data.gov.my/gtfs-realtime/vehicle-position/mybas-alor-setar",
       { responseType: "arraybuffer" }
     );
 
@@ -43,3 +43,4 @@ app.get("/api/ktmb", async (req, res) => {
 app.listen(PORT, () => {
   console.log("Server running on port " + PORT);
 });
+'https://api.data.gov.my/gtfs-realtime/vehicle-position/ktmb
